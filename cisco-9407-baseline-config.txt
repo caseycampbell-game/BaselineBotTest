@@ -1,0 +1,452 @@
+! ========================================
+! Cisco Catalyst 9407 - Secure Baseline Configuration
+! Access Layer Switch
+! ========================================
+!
+! IMPORTANT: Customize the following before deployment:
+! - Hostnames, domain names, IP addresses
+! - SNMP community strings
+! - AAA server addresses and keys
+! - Syslog server addresses
+! - NTP server addresses
+! - VLAN assignments
+! - Port configurations
+! ========================================
+
+! Basic System Configuration
+! ========================================
+hostname ACCESS-SW-9407-01
+!
+! Set domain name for SSH
+ip domain-name company.local
+!
+! Disable unused services
+no ip http server
+no ip http secure-server
+no cdp run
+no lldp run
+no ip bootp server
+no ip source-route
+no ip finger
+no service pad
+!
+! Enable essential services
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+service password-encryption
+service sequence-numbers
+service tcp-keepalives-in
+service tcp-keepalives-out
+!
+! Disable unused protocols
+no ip domain-lookup
+!
+! Console and VTY timeout
+line con 0
+ exec-timeout 5 0
+ logging synchronous
+ login authentication CONSOLE_AUTH
+!
+line vty 0 4
+ exec-timeout 10 0
+ transport input ssh
+ logging synchronous
+ login authentication VTY_AUTH
+ access-class VTY_ACCESS in
+!
+line vty 5 15
+ exec-timeout 10 0
+ transport input ssh
+ logging synchronous
+ login authentication VTY_AUTH
+ access-class VTY_ACCESS in
+!
+
+! ========================================
+! AAA Configuration
+! ========================================
+aaa new-model
+!
+! Authentication
+aaa authentication login default group tacacs+ local
+aaa authentication login CONSOLE_AUTH group tacacs+ local
+aaa authentication login VTY_AUTH group tacacs+ local
+aaa authentication enable default group tacacs+ enable
+aaa authentication dot1x default group radius
+!
+! Authorization
+aaa authorization exec default group tacacs+ local
+aaa authorization commands 1 default group tacacs+ local
+aaa authorization commands 15 default group tacacs+ local
+aaa authorization network default group radius
+!
+! Accounting
+aaa accounting exec default start-stop group tacacs+
+aaa accounting commands 1 default start-stop group tacacs+
+aaa accounting commands 15 default start-stop group tacacs+
+aaa accounting network default start-stop group radius
+aaa accounting system default start-stop group tacacs+
+!
+! TACACS+ Server Configuration (customize)
+tacacs-server host 10.1.1.10 key 7 <encrypted-key>
+tacacs-server host 10.1.1.11 key 7 <encrypted-key>
+tacacs-server timeout 5
+tacacs-server directed-request
+!
+! RADIUS Server Configuration for 802.1X (customize)
+radius-server host 10.1.1.20 auth-port 1812 acct-port 1813 key 7 <encrypted-key>
+radius-server host 10.1.1.21 auth-port 1812 acct-port 1813 key 7 <encrypted-key>
+radius-server timeout 5
+radius-server retransmit 3
+radius-server deadtime 10
+!
+! Local fallback accounts (use strong passwords)
+username admin privilege 15 secret 9 <type-9-encrypted-password>
+username netadmin privilege 15 secret 9 <type-9-encrypted-password>
+!
+! Enable password
+enable secret 9 <type-9-encrypted-password>
+!
+
+! ========================================
+! Logging Configuration
+! ========================================
+logging buffered 51200 informational
+logging console critical
+logging monitor informational
+logging trap informational
+!
+! Syslog servers (customize)
+logging host 10.1.2.10
+logging host 10.1.2.11
+!
+logging source-interface Vlan99
+logging facility local5
+!
+
+! ========================================
+! SNMP Configuration
+! ========================================
+! SNMPv3 (Recommended)
+snmp-server group SNMP_RO_GROUP v3 priv read SNMP_RO_VIEW
+snmp-server group SNMP_RW_GROUP v3 priv read SNMP_RW_VIEW write SNMP_RW_VIEW
+!
+snmp-server user snmpro SNMP_RO_GROUP v3 auth sha <auth-password> priv aes 256 <priv-password>
+snmp-server user snmprw SNMP_RW_GROUP v3 auth sha <auth-password> priv aes 256 <priv-password>
+!
+snmp-server view SNMP_RO_VIEW iso included
+snmp-server view SNMP_RW_VIEW iso included
+!
+! SNMPv2c (if required - use strong community strings)
+! snmp-server community <strong-ro-string> RO SNMP_ACCESS
+! snmp-server community <strong-rw-string> RW SNMP_ACCESS
+!
+snmp-server location "Building A - Floor 2 - IDF-01"
+snmp-server contact "NetOps Team - netops@company.com"
+!
+! SNMP Traps
+snmp-server enable traps snmp authentication linkdown linkup coldstart warmstart
+snmp-server enable traps config
+snmp-server enable traps entity
+snmp-server enable traps port-security
+snmp-server enable traps vtp
+snmp-server enable traps cpu threshold
+snmp-server host 10.1.2.20 version 3 priv snmpro
+!
+! ACL for SNMP access (customize)
+ip access-list standard SNMP_ACCESS
+ permit 10.1.2.0 0.0.0.255
+ permit 10.1.3.0 0.0.0.255
+ deny any log
+!
+
+! ========================================
+! NTP Configuration
+! ========================================
+ntp authenticate
+ntp authentication-key 1 md5 <ntp-key>
+ntp trusted-key 1
+!
+! NTP servers (customize)
+ntp server 10.1.4.10 key 1 prefer
+ntp server 10.1.4.11 key 1
+!
+ntp source Vlan99
+!
+! NTP access control
+ntp access-group peer 1
+ntp access-group serve-only 2
+ntp access-group query-only 2
+!
+access-list 1 permit 10.1.4.0 0.0.0.255
+access-list 2 permit 10.0.0.0 0.255.255.255
+!
+
+! ========================================
+! Management Interface Configuration
+! ========================================
+! Management VLAN (customize)
+vlan 99
+ name MGMT
+!
+interface Vlan99
+ description Management VLAN
+ ip address 10.1.10.50 255.255.255.0
+ no ip redirects
+ no ip unreachables
+ no ip proxy-arp
+ no shutdown
+!
+! Default route for management (customize)
+ip route 0.0.0.0 0.0.0.0 10.1.10.1
+!
+! Management ACL
+ip access-list extended VTY_ACCESS
+ remark Management stations only
+ permit tcp 10.1.1.0 0.0.0.255 any eq 22
+ permit tcp 10.1.2.0 0.0.0.255 any eq 22
+ deny ip any any log
+!
+
+! ========================================
+! SSH Configuration
+! ========================================
+crypto key generate rsa modulus 2048 label SSH_KEY
+!
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+ip ssh logging events
+ip ssh server algorithm encryption aes256-ctr aes192-ctr aes128-ctr
+ip ssh server algorithm mac hmac-sha2-256 hmac-sha2-512
+!
+
+! ========================================
+! Spanning Tree Configuration
+! ========================================
+spanning-tree mode rapid-pvst
+spanning-tree portfast bpduguard default
+spanning-tree portfast bpdufilter default
+spanning-tree extend system-id
+!
+! Root Guard on uplinks (configure on uplink ports)
+! interface range TenGigabitEthernet1/0/1 - 2
+!  spanning-tree guard root
+!
+! Loop Guard
+spanning-tree loopguard default
+!
+
+! ========================================
+! Port Security & DHCP Snooping
+! ========================================
+! DHCP Snooping
+ip dhcp snooping
+ip dhcp snooping vlan 10,20,30,40,50
+no ip dhcp snooping information option
+!
+! Dynamic ARP Inspection
+ip arp inspection vlan 10,20,30,40,50
+ip arp inspection validate src-mac dst-mac ip
+!
+! IP Source Guard (enable per-port)
+!
+
+! ========================================
+! 802.1X Configuration
+! ========================================
+! Global 802.1X settings
+dot1x system-auth-control
+dot1x critical eapol
+!
+! MAB (MAC Authentication Bypass) settings
+authentication event server dead action authorize vlan 999
+authentication event no-response action authorize vlan 999
+!
+
+! ========================================
+! VLANs Configuration (customize)
+! ========================================
+vlan 10
+ name DATA
+vlan 20
+ name VOICE
+vlan 30
+ name GUEST
+vlan 40
+ name IoT
+vlan 50
+ name SERVERS
+vlan 99
+ name MGMT
+vlan 999
+ name QUARANTINE
+!
+
+! ========================================
+! Uplink Port Template (to Distribution/Core)
+! ========================================
+! Apply to uplink ports (customize)
+!
+interface TenGigabitEthernet1/0/1
+ description UPLINK to CORE-SW-01
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,99
+ switchport nonegotiate
+ spanning-tree guard root
+ ip dhcp snooping trust
+ ip arp inspection trust
+ no cdp enable
+ storm-control broadcast level 10.00
+ storm-control multicast level 10.00
+ no shutdown
+!
+interface TenGigabitEthernet1/0/2
+ description UPLINK to CORE-SW-02
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40,50,99
+ switchport nonegotiate
+ spanning-tree guard root
+ ip dhcp snooping trust
+ ip arp inspection trust
+ no cdp enable
+ storm-control broadcast level 10.00
+ storm-control multicast level 10.00
+ no shutdown
+!
+
+! ========================================
+! Access Port Template (for end devices)
+! ========================================
+! Standard access port with 802.1X and port security
+! Apply this template to access ports
+!
+interface range GigabitEthernet1/0/3 - 48
+ description Access Port - Standard
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security maximum 3
+ switchport port-security violation restrict
+ switchport port-security aging time 2
+ switchport port-security aging type inactivity
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ storm-control broadcast level 5.00
+ storm-control multicast level 5.00
+ storm-control action shutdown
+ !
+ ! 802.1X Configuration
+ authentication host-mode multi-domain
+ authentication order dot1x mab
+ authentication priority dot1x mab
+ authentication port-control auto
+ authentication periodic
+ authentication timer reauthenticate server
+ authentication violation replace
+ mab
+ !
+ no cdp enable
+ no shutdown
+!
+
+! ========================================
+! Guest Port Template (for guest access)
+! ========================================
+! Apply to guest access ports
+!
+! interface range GigabitEthernet2/0/1 - 24
+!  description Guest Access Port
+!  switchport mode access
+!  switchport access vlan 30
+!  switchport port-security
+!  switchport port-security maximum 2
+!  switchport port-security violation restrict
+!  spanning-tree portfast
+!  spanning-tree bpduguard enable
+!  storm-control broadcast level 5.00
+!  storm-control multicast level 5.00
+!  no cdp enable
+!  no shutdown
+!
+
+! ========================================
+! Unused Port Template (disable unused ports)
+! ========================================
+! Apply to all unused ports
+!
+default interface range GigabitEthernet3/0/1 - 48
+!
+interface range GigabitEthernet3/0/1 - 48
+ description UNUSED PORT - DISABLED
+ switchport mode access
+ switchport access vlan 999
+ shutdown
+!
+
+! ========================================
+! Control Plane Security
+! ========================================
+! Control Plane Policing
+control-plane
+ service-policy input CPP_SYSTEM_POLICY
+!
+
+! ========================================
+! Banner Configuration
+! ========================================
+banner login ^C
+================================================================================
+                        AUTHORIZED ACCESS ONLY
+================================================================================
+This system is for authorized use only. All activity is monitored and logged.
+Unauthorized access is strictly prohibited and will be prosecuted to the
+fullest extent of the law.
+================================================================================
+^C
+!
+banner motd ^C
+================================================================================
+        Cisco Catalyst 9407 Access Switch - Secure Baseline
+================================================================================
+^C
+!
+
+! ========================================
+! Additional Security Features
+! ========================================
+! Secure the boot process
+no boot network
+!
+! Archive configuration
+archive
+ log config
+  logging enable
+  logging size 500
+  notify syslog contenttype plaintext
+  hidekeys
+!
+! Password strength enforcement
+security passwords min-length 12
+!
+! Login enhancements
+login block-for 300 attempts 3 within 60
+login delay 2
+login on-failure log
+login on-success log
+!
+
+! ========================================
+! Save Configuration
+! ========================================
+! After applying this configuration, save with:
+! write memory
+! or
+! copy running-config startup-config
+!
+! ========================================
+! End of Configuration
+! ========================================
