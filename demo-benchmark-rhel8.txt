@@ -1,0 +1,311 @@
+###############################################################################
+# CIS Red Hat Enterprise Linux 8 Benchmark
+# Essential Security Controls - Demo Version
+# Based on CIS RHEL 8 Benchmark v3.0.0
+###############################################################################
+
+OVERVIEW:
+This document contains essential security controls from the CIS RHEL 8
+Benchmark. These controls represent critical security configurations that
+should be implemented on Red Hat Enterprise Linux 8 systems.
+
+###############################################################################
+# 1. INITIAL SETUP
+###############################################################################
+
+## 1.1 Filesystem Configuration
+
+### 1.1.3 Ensure noexec option set on /tmp partition (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: The noexec mount option specifies that the filesystem cannot
+contain executable binaries.
+Rationale: Since the /tmp filesystem is only intended for temporary file
+storage, set this option to ensure that users cannot run executable binaries
+from /tmp.
+Audit:
+  Run: mount | grep -E '\s/tmp\s' | grep -v noexec
+  Verify: Output should be empty
+Remediation:
+  Edit /etc/fstab and add noexec,nodev,nosuid to /tmp mount options:
+    tmpfs /tmp tmpfs defaults,rw,nosuid,nodev,noexec,relatime 0 0
+  Remount: mount -o remount,noexec /tmp
+
+### 1.4.2 Ensure bootloader password is set (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Setting a boot loader password prevents users from changing
+boot parameters.
+Rationale: Requiring a boot password prevents unauthorized users from
+modifying boot parameters and potentially compromising the system.
+
+### 1.6.1.1 Ensure SELinux is installed (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: SELinux provides Mandatory Access Controls.
+Audit: rpm -q libselinux
+Remediation: dnf install libselinux
+
+### 1.6.1.2 Ensure SELinux is not disabled in bootloader configuration (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Configure SELinux to be enabled at boot time.
+Rationale: SELinux must be enabled at boot time to ensure mandatory access
+controls are in effect.
+
+### 1.8.1 Ensure message of the day is configured properly (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: The contents of /etc/issue.net should contain an appropriate
+warning banner.
+Remediation: Edit /etc/issue.net and add appropriate warning
+
+###############################################################################
+# 3. NETWORK CONFIGURATION
+###############################################################################
+
+## 3.3 Network Parameters (Host and Router)
+
+### 3.3.1 Ensure IP forwarding is disabled (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: The net.ipv4.ip_forward and net.ipv6.conf.all.forwarding flags
+are used to tell the system whether it can forward packets or not.
+Rationale: Setting the flags to 0 ensures that a system with multiple
+interfaces (for example, a hard proxy), will never be able to forward
+packets, and therefore, never serve as a router.
+Audit:
+  sysctl net.ipv4.ip_forward
+  Expected: net.ipv4.ip_forward = 0
+Remediation:
+  Set in /etc/sysctl.conf or /etc/sysctl.d/*:
+    net.ipv4.ip_forward = 0
+    net.ipv6.conf.all.forwarding = 0
+  Run: sysctl -w net.ipv4.ip_forward=0
+
+### 3.3.2 Ensure packet redirect sending is disabled (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: ICMP Redirects are used to send routing information to other hosts.
+Rationale: An attacker could use a compromised host to send invalid ICMP
+redirects to other router devices.
+Remediation:
+  net.ipv4.conf.all.send_redirects = 0
+  net.ipv4.conf.default.send_redirects = 0
+
+### 3.3.3 Ensure source routed packets are not accepted (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Attackers can use source routing to make traffic appear to
+originate from inside the network.
+Remediation:
+  net.ipv4.conf.all.accept_source_route = 0
+  net.ipv4.conf.default.accept_source_route = 0
+
+### 3.3.4 Ensure suspicious packets are logged (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation:
+  net.ipv4.conf.all.log_martians = 1
+
+### 3.3.5 Ensure broadcast ICMP requests are ignored (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation:
+  net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+## 3.4 Firewall Configuration
+
+### 3.4.1.1 Ensure firewalld is installed (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: firewalld provides a dynamically managed firewall.
+Audit: rpm -q firewalld
+Remediation: dnf install firewalld
+
+### 3.4.2 Ensure firewall services are restricted (Not Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Only authorized services should be accessible from the network.
+Rationale: Services listening on the network increase attack surface. Limit
+exposed services to only those required.
+Audit: firewall-cmd --list-all
+Remediation: Remove unnecessary services from firewall rules
+
+###############################################################################
+# 4. LOGGING AND AUDITING
+###############################################################################
+
+## 4.1 Configure System Accounting (auditd)
+
+### 4.1.1.1 Ensure auditd is installed (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Description: auditd is required for audit logging.
+Audit: rpm -q audit audit-libs
+Remediation: dnf install audit audit-libs
+
+### 4.1.2.1 Ensure audit log storage size is configured (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Description: Configure maximum size of audit log files.
+Remediation: Set max_log_file in /etc/audit/auditd.conf
+
+### 4.1.2.2 Ensure audit logs are not automatically deleted (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Remediation: Set max_log_file_action = keep_logs in /etc/audit/auditd.conf
+
+### 4.1.2.3 Ensure system is disabled when audit logs are full (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Remediation:
+  space_left_action = email
+  action_mail_acct = root
+  admin_space_left_action = halt
+
+### 4.1.3.4 Ensure events that modify user/group information are collected (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Description: Monitor changes to /etc/passwd, /etc/group, etc.
+Audit Rules:
+  -w /etc/group -p wa -k identity
+  -w /etc/passwd -p wa -k identity
+  -w /etc/gshadow -p wa -k identity
+  -w /etc/shadow -p wa -k identity
+
+### 4.1.3.17 Ensure changes to system administration scope are collected (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Audit Rules:
+  -w /etc/sudoers -p wa -k scope
+  -w /etc/sudoers.d/ -p wa -k scope
+
+### 4.1.8 Ensure login and logout events are collected (Scored)
+Profile Applicability: Level 2 - Server, Level 2 - Workstation
+Audit Rules:
+  -w /var/log/lastlog -p wa -k logins
+  -w /var/run/faillock/ -p wa -k logins
+
+###############################################################################
+# 5. ACCESS, AUTHENTICATION AND AUTHORIZATION
+###############################################################################
+
+## 5.1 Configure cron
+
+### 5.1.1 Ensure cron daemon is enabled (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Audit: systemctl is-enabled crond
+Remediation: systemctl --now enable crond
+
+### 5.1.2 Ensure permissions on /etc/crontab are configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: chown root:root /etc/crontab && chmod 600 /etc/crontab
+
+### 5.1.7 Ensure permissions on /etc/cron.d are configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: chown root:root /etc/cron.d && chmod 700 /etc/cron.d
+
+## 5.2 SSH Server Configuration
+
+### 5.2.9 Ensure SSH PermitEmptyPasswords is disabled (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Disallow SSH login with empty passwords.
+Remediation: Set in /etc/ssh/sshd_config:
+  PermitEmptyPasswords no
+
+### 5.2.10 Ensure SSH root login is disabled (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: The PermitRootLogin parameter specifies if the root user can
+log in using ssh.
+Rationale: Disallowing root logins over SSH requires system admins to
+authenticate using their own individual account, then escalate to root via
+sudo or su. This provides accountability and monitoring.
+Audit: sshd -T | grep permitrootlogin
+  Expected: permitrootlogin no
+Remediation: Set in /etc/ssh/sshd_config:
+  PermitRootLogin no
+  Then: systemctl reload sshd
+
+### 5.2.15 Ensure SSH warning banner is configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: Set in /etc/ssh/sshd_config:
+  Banner /etc/issue.net
+
+### 5.2.16 Ensure SSH Idle Timeout Interval is configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: Set in /etc/ssh/sshd_config:
+  ClientAliveInterval 300
+  ClientAliveCountMax 0
+
+### 5.2.19 Ensure SSH MaxSessions is limited (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Limit maximum number of sessions per network connection.
+Remediation: Set in /etc/ssh/sshd_config:
+  MaxSessions 10
+
+## 5.3 Configure PAM
+
+### 5.3.2 Ensure lockout for failed password attempts is configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Lock out users after n unsuccessful consecutive login attempts.
+Rationale: By limiting the number of failed login attempts, the risk of
+unauthorized system access via brute force attacks is reduced.
+Remediation: Edit /etc/pam.d/password-auth and /etc/pam.d/system-auth:
+  auth required pam_faillock.so preauth silent deny=3 unlock_time=900
+  auth required pam_faillock.so authfail deny=3 unlock_time=900
+  account required pam_faillock.so
+
+## 5.4 User Accounts and Environment
+
+### 5.4.1 Set Shadow Password Suite Parameters
+
+#### 5.4.1.1 Ensure password expiration is 365 days or less (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: PASS_MAX_DAYS parameter in /etc/login.defs
+Rationale: Forcing password changes reduces risk of compromised credentials.
+Remediation: Set in /etc/login.defs:
+  PASS_MAX_DAYS 90
+
+#### 5.4.1.2 Ensure minimum days between password changes is configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: Set in /etc/login.defs:
+  PASS_MIN_DAYS 7
+
+#### 5.4.1.3 Ensure password expiration warning days is 7 or more (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: Set in /etc/login.defs:
+  PASS_WARN_AGE 7
+
+#### 5.4.1.4 Ensure password minimum length is configured (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Remediation: Set in /etc/security/pwquality.conf:
+  minlen = 14
+
+### 5.4.1 (Continued) Password Complexity
+
+Description: Password complexity ensures passwords are not easily guessable.
+Remediation: Set in /etc/security/pwquality.conf:
+  minlen = 14
+  dcredit = -1   # At least one digit
+  ucredit = -1   # At least one uppercase
+  ocredit = -1   # At least one special character
+  lcredit = -1   # At least one lowercase
+  maxrepeat = 3  # Maximum consecutive repeated characters
+
+### 5.4.4 Ensure default user umask is 027 or more restrictive (Scored)
+Profile Applicability: Level 1 - Server, Level 1 - Workstation
+Description: Default permissions for new files/directories.
+Remediation: Set in /etc/login.defs and shell configs:
+  UMASK 027
+
+###############################################################################
+# SCORING GUIDE
+###############################################################################
+
+Compliance Scoring:
+- CRITICAL findings: Controls that leave system highly vulnerable
+  * Root SSH login enabled
+  * IP forwarding on non-router
+  * Missing noexec on /tmp
+  * Weak account lockout (>3 attempts)
+
+- HIGH findings: Significant security gaps
+  * Firewall disabled
+  * Audit logging not configured
+  * SELinux disabled
+
+- MEDIUM findings: Important security improvements
+  * Missing SSH hardening settings
+  * Weak password policies
+  * Unnecessary services exposed
+
+- LOW findings: Best practice improvements
+  * Missing warning banners
+  * Suboptimal log retention
+
+###############################################################################
+# END OF CIS RHEL 8 BENCHMARK (ESSENTIAL CONTROLS)
+###############################################################################
