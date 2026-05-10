@@ -1,0 +1,166 @@
+###############################################################################
+# Demo Red Hat Enterprise Linux 8 Configuration
+# CIS RHEL 8 Benchmark Demo - Optimized for fast analysis
+# Expected result: Mix of PASS, FAIL, and WARN findings
+#
+# DISCLAIMER: This is a DEMO configuration created for testing purposes.
+# Contains no sensitive or production data.
+###############################################################################
+
+### SYSTEM INFORMATION ###
+Hostname: demo-rhel8-server
+OS: Red Hat Enterprise Linux 8.7
+Kernel: 4.18.0-425.el8.x86_64
+
+###############################################################################
+# CIS 5.2.x - SSH Server Configuration (MIXED: Some PASS, Some FAIL)
+###############################################################################
+
+# /etc/ssh/sshd_config
+Protocol 2
+PermitRootLogin yes                    # FAIL - CIS 5.2.10 (Should be 'no')
+MaxAuthTries 6
+IgnoreRhosts yes
+HostbasedAuthentication no
+PermitEmptyPasswords no                # PASS - CIS 5.2.9
+PermitUserEnvironment no
+Ciphers aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512,hmac-sha2-256
+KexAlgorithms diffie-hellman-group14-sha256
+ClientAliveInterval 300                # PASS - CIS 5.2.16
+ClientAliveCountMax 0
+LoginGraceTime 60
+Banner /etc/issue.net                  # PASS - CIS 5.2.15
+# Missing: MaxSessions setting          # WARN - CIS 5.2.19
+
+###############################################################################
+# CIS 5.4.x - User Accounts and Password Policy (MIXED)
+###############################################################################
+
+# /etc/login.defs
+PASS_MAX_DAYS   90                     # PASS - CIS 5.4.1.1
+PASS_MIN_DAYS   7                      # PASS - CIS 5.4.1.2
+PASS_MIN_LEN    14                     # PASS - CIS 5.4.1.4
+PASS_WARN_AGE   7                      # PASS - CIS 5.4.1.3
+UMASK           022                    # PASS - CIS 5.4.4
+
+# /etc/security/pwquality.conf
+minlen = 14
+dcredit = -1
+ucredit = -1
+ocredit = -1
+lcredit = -1
+# Missing: maxrepeat setting            # WARN - CIS 5.4.1
+
+###############################################################################
+# CIS 5.3.x - PAM Configuration (FAIL - Weak lockout policy)
+###############################################################################
+
+# /etc/pam.d/password-auth (simplified)
+auth required pam_faillock.so preauth audit deny=5 unlock_time=900
+                                       # FAIL - CIS 5.3.2 (Should be deny=3)
+auth sufficient pam_unix.so
+auth required pam_faillock.so authfail audit deny=5 unlock_time=900
+
+###############################################################################
+# CIS 4.1.x - Audit Configuration (PASS)
+###############################################################################
+
+# auditd status
+auditd: enabled                        # PASS - CIS 4.1.1.1
+audit rules: 47 loaded
+max_log_file: 8 MB                     # PASS - CIS 4.1.2.1
+max_log_file_action: keep_logs         # PASS - CIS 4.1.2.2
+space_left: 75 MB                      # PASS - CIS 4.1.2.3
+space_left_action: email
+
+# Sample audit rules configured:
+-w /etc/sudoers -p wa -k scope         # PASS - CIS 4.1.3.17
+-w /var/log/lastlog -p wa -k logins    # PASS - CIS 4.1.8
+-w /etc/passwd -p wa -k identity       # PASS - CIS 4.1.3.4
+
+###############################################################################
+# CIS 3.4.x - Firewall Configuration (WARN - Permissive rules)
+###############################################################################
+
+# firewalld status
+firewalld: active                      # PASS - CIS 3.4.1.1
+default zone: public
+
+# Active rules (simplified)
+ACCEPT: ssh (port 22)
+ACCEPT: http (port 80)
+ACCEPT: https (port 443)
+ACCEPT: mysql (port 3306)              # WARN - Database exposed externally
+# Missing: Rate limiting on SSH         # WARN - No connection limiting
+
+###############################################################################
+# CIS 1.1.x - Filesystem Configuration (FAIL - Missing noexec on /tmp)
+###############################################################################
+
+# /etc/fstab (relevant entries)
+/dev/mapper/rhel-root   /        xfs     defaults        0 0
+/dev/sda1              /boot     xfs     defaults        0 0
+tmpfs                  /tmp      tmpfs   defaults        0 0
+                                       # FAIL - CIS 1.1.3 (Missing noexec,nodev,nosuid)
+
+###############################################################################
+# CIS 1.4.x - Bootloader Configuration (PASS)
+###############################################################################
+
+# GRUB2 bootloader
+Bootloader password: configured        # PASS - CIS 1.4.2
+SELinux: Enforcing                     # PASS - CIS 1.6.1.1
+SELinux policy: targeted               # PASS - CIS 1.6.1.2
+
+###############################################################################
+# CIS 5.1.x - Cron Configuration (PASS)
+###############################################################################
+
+# Cron permissions
+/etc/crontab: 600 root:root            # PASS - CIS 5.1.2
+/etc/cron.d: 700 root:root             # PASS - CIS 5.1.7
+crond service: enabled                 # PASS - CIS 5.1.1
+
+###############################################################################
+# CIS 3.3.x - Network Parameters (FAIL - IP forwarding enabled)
+###############################################################################
+
+# /etc/sysctl.conf
+net.ipv4.ip_forward = 1                # FAIL - CIS 3.3.1 (Should be 0 for non-router)
+net.ipv4.conf.all.send_redirects = 0   # PASS - CIS 3.3.2
+net.ipv4.conf.default.accept_source_route = 0  # PASS - CIS 3.3.3
+net.ipv4.conf.all.accept_redirects = 0  # PASS - CIS 3.3.4
+net.ipv4.icmp_echo_ignore_broadcasts = 1  # PASS - CIS 3.3.5
+
+###############################################################################
+# CIS 1.8.x - Warning Banners (PASS)
+###############################################################################
+
+# /etc/issue.net
+"Authorized access only. All activity may be monitored and reported."
+                                       # PASS - CIS 1.8.1
+
+###############################################################################
+# SUMMARY OF INTENTIONAL FINDINGS FOR DEMO
+###############################################################################
+#
+# CRITICAL Findings (3):
+# 1. PermitRootLogin enabled (Line 14) - CIS 5.2.10
+# 2. IP forwarding enabled (Line 122) - CIS 3.3.1
+# 3. /tmp mounted without noexec (Line 108) - CIS 1.1.3
+#
+# HIGH Findings (1):
+# 4. Weak account lockout threshold (Line 54) - CIS 5.3.2 (deny=5, should be 3)
+#
+# MEDIUM Findings (2):
+# 5. MySQL exposed externally (Line 96) - CIS 3.4.x
+# 6. Missing SSH MaxSessions setting (Line 24) - CIS 5.2.19
+#
+# LOW/INFO Findings (2):
+# 7. Missing pwquality maxrepeat (Line 45) - CIS 5.4.1
+# 8. No SSH rate limiting configured (Line 98) - CIS 3.4.x
+#
+# Expected Score: ~60-70% (similar to Cisco demo)
+#
+###############################################################################
